@@ -36,26 +36,35 @@ class Agent:
         self.headless = headless
 
     async def run(self):
-        urls = self.task.split("Analyze these websites: ")[1].split(". ")[0].split(", ")
+        # Split input into URLs and keywords
+        input_items = [item.strip() for item in self.task.split("Analyze these websites: ")[1].split(". ")[0].split(", ")]
         query = self.task.split(". ")[1]
+
+        # Separate URLs from keywords using a simple regex
+        urls = [item for item in input_items if re.match(r'^(https?://|www\.)', item)]
+        keywords = [item for item in input_items if not re.match(r'^(https?://|www\.)', item)]
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=self.headless)
             page = await browser.new_page()
             analysis = ""
 
-            # Visit each URL and scrape basic content
+            # Process URLs
             for url in urls:
                 try:
-                    await page.goto(url.strip(), timeout=60000)
+                    await page.goto(url, timeout=60000)
                     content = await page.content()
-                    # Simple extraction (could be enhanced with more logic)
                     analysis += f"Website: {url}\nContent Preview: {content[:200]}...\n\n"
                 except Exception as e:
                     analysis += f"Website: {url}\nError: {str(e)}\n\n"
 
+            # Process keywords (simple acknowledgment for now, could be expanded)
+            if keywords:
+                analysis += "Keywords provided: " + ", ".join(keywords) + "\n\n"
+                # Optional: Add web search logic for keywords here in the future
+
             # Use LLM to analyze based on query
-            prompt = f"{self.task}\n\nScraped Data:\n{analysis}"
+            prompt = f"{self.task}\n\nScraped Data and Keywords:\n{analysis}"
             response = await self.llm.apredict(prompt)
             await browser.close()
             return response
@@ -64,14 +73,14 @@ class Agent:
 @app.post("/analyze")
 async def analyze_websites(input_data: AnalyzeInput):
     try:
-        urls = input_data.urls
+        input_text = input_data.urls
         query = input_data.query
 
-        if not urls or not query:
-            return {"error": "Please provide both URLs and a query"}
+        if not input_text or not query:
+            return {"error": "Please provide both URLs/Keywords and a query"}
 
         # Create the task string
-        task = f"Analyze these websites: {urls}. {query}"
+        task = f"Analyze these websites: {input_text}. {query}"
 
         # Initialize the Agent with headless mode
         agent = Agent(
