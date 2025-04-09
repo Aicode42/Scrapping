@@ -38,7 +38,7 @@ class Agent:
 
     async def run(self):
         # Split input into URLs and keywords
-        input_items = [item.strip() for item in self.task.split("Analyze these: ")[1].split(". ")[0].split(", ")]
+        input_items = [item.strip() for item in self.task.split("Analyze these : ")[1].split(". ")[0].split(", ")]
         query = self.task.split(". ")[1]
 
         # Separate URLs from keywords using a simple regex
