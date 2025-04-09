@@ -179,5 +179,5 @@ async def index():
 # Run the app with Uvicorn
 if __name__ == '__main__':
     import uvicorn
-    port = int(os.environ.get("PORT", 5000))  # Get the port from Render
+    port = int(os.environ.get("PORT", 8000))  # Get the port from Render
     uvicorn.run(debug=True, host='0.0.0.0', port=port)
