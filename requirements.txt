@@ -3,3 +3,4 @@ load_dotenv
 pydantic
 uvicorn
 langchain-openai
+playwright
