@@ -38,7 +38,7 @@ class Agent:
 
     async def run(self):
         # Split input into URLs and keywords
-        input_items = [item.strip() for item in self.task.split("Analyze these : ")[1].split(". ")[0].split(", ")]
+        input_items = [item.strip() for item in self.task.split("Analyze these: ")[1].split(". ")[0].split(", ")]
         query = self.task.split(". ")[1]
 
         # Separate URLs from keywords using a simple regex
@@ -81,7 +81,7 @@ async def analyze_websites(input_data: AnalyzeInput):
             return {"error": "Please provide both URLs/Keywords and a query"}
 
         # Create the task string
-        task = f"Analyze these websites: {input_text}. {query}"
+        task = f"Analyze these : {input_text}. {query}"
 
         # Initialize the Agent with headless mode
         agent = Agent(
