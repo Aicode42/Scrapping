@@ -4,3 +4,4 @@ pydantic
 uvicorn
 langchain-openai
 playwright
+browser-use
