@@ -1,104 +1,128 @@
 import asyncio
 import os
-import re
-from fastapi import FastAPI
+import subprocess
+import sys
+import logging
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from typing import List
 from langchain_openai import ChatOpenAI
-from playwright.async_api import async_playwright
+from browser_use import Agent, Controller
 from dotenv import load_dotenv
+
+# Initialize FastAPI app
+app = FastAPI()
+
+load_dotenv()
+
+templates = Jinja2Templates(directory="templates")
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,  # Can be DEBUG, INFO, WARNING, ERROR, CRITICAL
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("app.log"),  # Log to a file named app.log
+        logging.StreamHandler()         # Optional: Also log to console
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Set the event loop policy for Windows to support subprocesses
 if os.name == 'nt':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
+# Check and install Playwright if not already installed
+def ensure_playwright_installed():
+    playwright_installed_flag = os.path.join(os.path.expanduser("~"), ".playwright_installed")
+    if not os.path.exists(playwright_installed_flag):
+        try:
+            print("Installing Playwright dependencies...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "playwright"])
+            subprocess.check_call(["playwright", "install"])
+            # Create a flag file to indicate Playwright is installed
+            with open(playwright_installed_flag, "w") as f:
+                f.write("Playwright installed")
+            print("Playwright installed successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to install Playwright: {e}")
+            sys.exit(1)
+    else:
+        print("Playwright is already installed, skipping installation.")
+
+# Run the Playwright installation check at startup
+ensure_playwright_installed()
+
 # Load environment variables
-load_dotenv()
 
-# Configure the LLM
-llm = ChatOpenAI(
-    model="gpt-4o",
-    api_key=os.getenv("OPENAI_API_KEY")
-)
 
-# Initialize FastAPI app
-app = FastAPI()
+# Define the output format as a Pydantic model
+class Post(BaseModel):
+    text: str
+
+
+class Posts(BaseModel):
+    posts: List[Post]
+
 
 # Define input model for /analyze endpoint
 class AnalyzeInput(BaseModel):
     urls: str
     query: str
 
-# Agent class for browser automation and analysis
-class Agent:
-    def __init__(self, task, llm, headless=True):
-        self.task = task
-        self.llm = llm
-        self.headless = headless
-
-    async def run(self):
-        # Split input into URLs and keywords
-        input_items = [item.strip() for item in self.task.split("Analyze these : ")[1].split(". ")[0].split(", ")]
-        query = self.task.split(". ")[1]
-
-        # Separate URLs from keywords using a simple regex
-        urls = [item for item in input_items if re.match(r'^(https?://|www\.)', item)]
-        keywords = [item for item in input_items if not re.match(r'^(https?://|www\.)', item)]
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=self.headless)
-            page = await browser.new_page()
-            analysis = ""
-
-            # Process URLs
-            for url in urls:
-                try:
-                    await page.goto(url, timeout=60000)
-                    content = await page.content()
-                    analysis += f"Website: {url}\nContent Preview: {content[:200]}...\n\n"
-                except Exception as e:
-                    analysis += f"Website: {url}\nError: {str(e)}\n\n"
-
-            # Process keywords (simple acknowledgment for now, could be expanded)
-            if keywords:
-                analysis += "Keywords provided: " + ", ".join(keywords) + "\n\n"
-                # Optional: Add web search logic for keywords here in the future
-
-            # Use LLM to analyze based on query
-            prompt = f"{self.task}\n\nScraped Data and Keywords:\n{analysis}"
-            response = await self.llm.apredict(prompt)
-            await browser.close()
-            return response
-
 # Analyze endpoint
 @app.post("/analyze")
 async def analyze_websites(input_data: AnalyzeInput):
     try:
-        input_text = input_data.urls
+        urls = input_data.urls
         query = input_data.query
 
-        if not input_text or not query:
-            return {"error": "Please provide both URLs/Keywords and a query"}
+        if not urls or not query:
+            return {"error": "Please provide field"}
 
         # Create the task string
-        task = f"Analyze these : {input_text}. {query}"
+        task = f"{query} for this : {urls}"
 
-        # Initialize the Agent with headless mode
+        # Configure LLM
+        llm = ChatOpenAI(
+            model="gpt-4o",  # Or your preferred model
+            api_key=os.getenv("OPENAI_API_KEY")
+        )
+
+        # Initialize the Controller
+        controller = Controller(output_model=Posts)
+
+        # Initialize the Agent
         agent = Agent(
             task=task,
             llm=llm,
-            headless=True
+            controller=controller
         )
 
         # Run the agent asynchronously
-        result = await agent.run()
+        history = await agent.run()
+
+        # Extract the result and parse to a list of `Post` objects
+        result = history.final_result()
+        if result:
+            parsed_posts: Posts = Posts.model_validate_json(result)
+            result_text = parsed_posts.model_dump_json(indent=2)  # Format as JSON
+        else:
+            result_text = "No results found."
+
+        # Log the processed result
+        logger.info(f"Processed result sent to frontend: {result_text}")
 
         return {
             "status": "success",
             "task": task,
-            "result": result
+            "result": result_text
         }
+
     except Exception as e:
+        logger.error(f"Error in analyze_websites: {str(e)}")
         return {"error": str(e)}
 
 # Root endpoint serving HTML
