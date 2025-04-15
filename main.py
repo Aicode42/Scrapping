@@ -5,19 +5,16 @@ import sys
 import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
-# from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import List
 from langchain_openai import ChatOpenAI
-from browser_use import Agent, Controller
+from browser_use import Agent, Controller, BrowserConfig, Browser
 from dotenv import load_dotenv
 
 # Initialize FastAPI app
 app = FastAPI()
 
 load_dotenv()
-
-# templates = Jinja2Templates(directory="templates")
 
 # Configure logging
 logging.basicConfig(
@@ -93,12 +90,15 @@ async def analyze_websites(input_data: AnalyzeInput):
 
         # Initialize the Controller
         controller = Controller(output_model=Posts)
+        config = BrowserConfig(headless=True, disable_security=True)
+        browser = Browser(config=config)
 
         # Initialize the Agent
         agent = Agent(
             task=task,
             llm=llm,
-            controller=controller
+            controller=controller,
+            browser=browser,
         )
 
         # Run the agent asynchronously
