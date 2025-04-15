@@ -5,7 +5,7 @@ import sys
 import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+# from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import List
 from langchain_openai import ChatOpenAI
@@ -17,7 +17,7 @@ app = FastAPI()
 
 load_dotenv()
 
-templates = Jinja2Templates(directory="templates")
+# templates = Jinja2Templates(directory="templates")
 
 # Configure logging
 logging.basicConfig(
